@@ -30,9 +30,9 @@ robot-cloud-system-spec/
 
 ## 各ディレクトリの役割
 
-- **[architecture/](./architecture/)**: システム全体の構成図やアーキテクチャ概要
-- **[usecase/](./usecase/)**: ユースケース図や利用シナリオの説明
-- **[sequence/](./sequence/)**: 主要な処理・通信フローのシーケンス図
+- **[architecture/](./architecture/index.md)**: システム全体の構成図やアーキテクチャ概要
+- **[usecase/](./usecase/index.md)**: ユースケース図や利用シナリオの説明
+- **[sequence/](./sequence/index.md)**: 主要な処理・通信フローのシーケンス図
 - **[entity/](./entity/)**: データ構造や ER 図、クラス図
 - **[state/](./state/)**: ロボットや指令などの状態遷移図
 - **[api/](./api/)**: REST, GraphQL 等の API 仕様書
