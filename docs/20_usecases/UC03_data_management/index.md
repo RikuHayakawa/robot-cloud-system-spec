@@ -128,6 +128,6 @@ graph TD
 ## 関連ファイル
 
 - [実験セッションの概念](experiment_session.md)
-- [シーケンス図](sequence.mmd)
+- [シーケンス図](sequence.md)
 - [API 仕様](api_spec.md)
 - [クラス図](class_diagram.pu)
