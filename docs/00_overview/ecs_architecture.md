@@ -1,6 +1,6 @@
-# システム構成図・アーキテクチャ
+**[← 概要・全体構成に戻る](./index.md)**
 
-## 概要
+## サーバーインスタンス構成
 
 ロボット管理システムは、**GraphQL API サーバー**と **gRPC over MQTT Proxy** を中心とした効率的でスケーラブルなアーキテクチャを採用。
 
@@ -12,53 +12,58 @@ graph TD
     Robot[ロボット]
 
     subgraph AWS
-        DynamoDB[DynamoDB]
-        Timestream[Timestream]
-        IoTCore[AWS IoT Core]
-        SQS[SQSキュー]
+        DynamoDB[DynamoDB （構造化データ）]
+        Timestream[Timestream （時系列データ）]
+        IoTCore[AWS IoT Core （MQTTブローカー）]
         SNS[SNS（通知）]
+        APIGateway[API Gateway （HTTP API）]
+        Cognito[Cognito（認証）]
 
-        subgraph ECS
-            GraphQLServer[GraphQL APIサーバー]
-            gRPCProxy[gRPC over MQTT Proxy]
-            EventProcessor[イベントプロセッサ]
+        subgraph LambdaCluster
+            LambdaAPI[Lambda（API処理）]
+            LambdaIoT[Lambda（IoT操作専用）]
+            LambdaResponse[Lambda（ロボット応答処理）]
         end
 
         subgraph CloudWatch
             ErrorAlarm[エラーアラーム]
+            LogGroup[CloudWatch Logs]
         end
     end
 
-    %% 管理者との通信（GraphQL）
-    Admin -->|GraphQL Query/Mutation| GraphQLServer
+    %% 管理者との通信（認証付きAPI Gateway）
+    Admin -->|認証付きHTTPS| Cognito
+    Cognito -->|認証連携| APIGateway
+    APIGateway --> LambdaAPI
 
-    %% GraphQLサーバーによるDB処理
-    GraphQLServer -- データ取得/登録 --> DynamoDB
-    GraphQLServer -- データ取得/登録 --> Timestream
+    %% LambdaAPIがDB操作
+    LambdaAPI -- データ取得/登録 --> DynamoDB
+    LambdaAPI -- 時系列データ参照 --> Timestream
 
-    %% GraphQLサーバーからgRPC Proxyへの通信
-    GraphQLServer -- gRPC呼び出し --> gRPCProxy
+    %% LambdaIoTがIoT Core操作
+    LambdaAPI -- 指令・制御リクエスト --> LambdaIoT
+    LambdaIoT -- MQTT Publish --> IoTCore
 
-    %% gRPC ProxyとIoT Coreの通信
-    gRPCProxy -- MQTTにgRPCパケット封入 --> IoTCore
-    IoTCore -- gRPCレスポンスをMQTTで中継 --> gRPCProxy
+    %% ロボットとのMQTT双方向通信
+    Robot <-- MQTT-コマンド --> IoTCore
+    Robot --> IoTCore
 
-    %% 従来のMQTT通信（ログ・エラー通知・状態監視）
-    IoTCore -- MQTT --> Robot
-    Robot -- MQTT（定性ログ・エラー通知・状態監視） --> IoTCore
+    %% IoT Coreからの応答トリガー
+    IoTCore -- MQTTルール --> LambdaResponse
+    LambdaResponse -- 結果記録 --> DynamoDB
+    LambdaResponse -- ログ保存 --> Timestream
 
-    %% イベント処理
-    IoTCore -- ルール/サブスクリプション --> SQS
-    SQS --> EventProcessor
-    EventProcessor -- 書き込み --> DynamoDB
-    EventProcessor -- 時系列データ保存 --> Timestream
-
-    %% CloudWatch監視
-    GraphQLServer -- エラーログ/メトリクス --> ErrorAlarm
-    gRPCProxy -- メトリクス送信 --> ErrorAlarm
-    EventProcessor -- メトリクス送信 --> ErrorAlarm
+    %% CloudWatch監視・ログ集約
+    LambdaAPI -- ログ/メトリクス --> LogGroup
+    LambdaIoT -- ログ/メトリクス --> LogGroup
+    LambdaResponse -- ログ/メトリクス --> LogGroup
+    LogGroup -- エラーログ監視 --> ErrorAlarm
     ErrorAlarm -- アラート --> SNS
-    SNS -- 直接通知 --> Slack[Slack]
+    SNS -- 通知 --> Slack[Slack]
+
+    %% 補足: IP制限やWAFはAPI Gatewayの付帯機能として想定
+
+
 ```
 
 ## アーキテクチャの特徴
@@ -81,7 +86,6 @@ graph TD
 - **フロントエンド開発効率**: 柔軟なクエリ構造でフロントエンド開発が効率化
 
 ### 2. **gRPC over MQTT Proxy**
-
 - **高性能通信**: gRPC の効率的なシリアライゼーション（Protocol Buffers）
 - **型安全性**: 強力な型定義とコード生成
 - **双方向通信**: ストリーミング対応でリアルタイム制御が可能
